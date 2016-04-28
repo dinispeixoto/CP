@@ -29,7 +29,7 @@ import Graph
 import Test.HUnit hiding (path)
 import Test.QuickCheck
 import Data.Set as Set
-
+import Data.Maybe
 --
 -- Teste unitário
 --
@@ -229,6 +229,7 @@ main = runTestTT $ TestList [test_swap, test_empty, test_isEmpty, test_isEmpty2,
 --
 
 -- Instância de Arbitrary para arestas
+
 instance Arbitrary v => Arbitrary (Edge v) where
     arbitrary = do s <- arbitrary
                    t <- arbitrary 
@@ -299,8 +300,8 @@ prop_swap :: Edge Int -> Property
 prop_swap g = (source g == target (swap g)) .&&. (target g == source (swap g))
 
 --Prop empty-----------------
-prop_empty :: Bool
-prop_empty = isEmpty (Graph.empty) 
+prop_empty :: Property
+prop_empty = property (isEmpty (Graph.empty))
 
 --Prop isEmpty----------------
 prop_isEmpty :: Graph Int -> Property
@@ -308,19 +309,60 @@ prop_isEmpty g  = Set.null(nodes g) ==> property (isEmpty g)
 
 --Prop isValid------------------
 prop_isValid :: Graph Int -> Property
-prop_isValid g = isValid g ==> forAll (elements $ elems $ edges g) $ \a -> fromList[source a,target a] `isSubsetOf` nodes g
+prop_isValid g | Set.null(edges g) = label "isValid" True
+               | otherwise = forAll (elements $ elems $ edges g) $ \a -> fromList[source a,target a] `isSubsetOf` nodes g ==> isValid g
 
 --Prop isDAG---------------------
-prop_isDAG :: DAG Int -> Property
-prop_isDAG d | Set.null(edges d) = label "isDAG" True
-             | otherwise = forAll (elements $ elems $ nodes d) $ \v -> (forAll (elements $ elems $ (adj d v)) $ \a -> v `notMember` reachable d (target a))
+prop_isDAG :: Graph Int -> Property
+prop_isDAG d = isDAG d ==> forAll (elements $ elems $ nodes d) $ \v -> if (not(Set.null (adj d v))) then forAll (elements $ elems $ (adj d v)) $ \a -> v `notMember` reachable d (target a) else property True
 
 --Prop isForest----------------------
-prop_isForest :: Forest Int -> Property
+prop_isForest :: Graph Int -> Property
 prop_isForest f = isForest f ==> forAll (elements $ elems $ nodes f) $ \v -> length (adj f v) <= 1
 
+--Prop isSubgraphOf-----------------
+prop_isSubgraphOf :: Graph Int -> Graph Int -> Property
+prop_isSubgraphOf g h = isSubgraphOf g h ==> isSubsetOf (nodes g) (nodes h) && isSubsetOf (edges g) (edges h)
 
+prop_isSubgraphOf2 :: Graph Int -> Graph Int -> Property
+prop_isSubgraphOf2 g h = isEmpty g ==> isSubgraphOf g h
 
--- Exemplo de uma propriedade QuickCheck para testar a função adj          
+-- Exemplo de uma propriedade QuickCheck para testar a função adj
 prop_adj :: Graph Int -> Property
 prop_adj g = forAll (elements $ elems $ nodes g) $ \v -> adj g v `isSubsetOf` edges g
+
+prop_adj2 :: Graph Int -> Property
+prop_adj2 g = forAll (elements $ elems $ nodes g) $ \v -> Set.map target(adj g v) `isSubsetOf` nodes g
+
+--Prop transpose----------------------
+prop_transpose :: Graph Int -> Property
+prop_transpose g = property (transpose(transpose g) == g)
+
+--Prop union---------------------------
+prop_union :: Graph Int -> Graph Int -> Property
+prop_union g h = isSubgraphOf g (Graph.union g h) .&&. isSubgraphOf h (Graph.union g h)
+
+--Prop bft------------------------------
+--prop_bft :: Graph Int -> Set Int -> Property
+--prop_bft g 
+
+--Prop reachable--------------------------
+prop_reachable :: Graph Int -> Property
+prop_reachable g | Set.null(nodes g) = label "Vazio" True
+                 | otherwise = forAll (elements $ elems $ nodes g) $ \v -> (reachable g v) `isSubsetOf` nodes g
+
+--Prop isPathOf--------------------------
+prop_isPathOf :: Graph Int -> Property
+prop_isPathOf g | Set.null(nodes g) || Set.null(edges g) = label "Não existem caminhos" True
+                | otherwise = forAll (elements $ elems $ edges g) $ \a -> isPathOf [a] g
+
+prop_isPathOf2 :: Graph Int -> Property
+prop_isPathOf2 g | Set.null(nodes g) || Set.null(edges g) = label "Não existem caminhos" True
+                 | otherwise = forAll (elements $ elems $ nodes g) $ \v -> forAll (elements $ elems $ (nodes g)) $ \v1 -> if ((path g v v1) /= Nothing) then isPathOf (fromJust(path g v v1)) g else True
+
+--Prop path---------------------------
+prop_path :: Graph Int -> Property
+prop_path g | Set.null(nodes g) || Set.null(edges g) = label "Não existem caminhos" True
+            | otherwise = forAll (elements $ elems $ nodes g) $ \v -> forAll (elements $ elems $ (nodes g)) $ \v1 -> if ((path g v v1) /= Nothing) then fromList(fromJust(path g v v1)) `isSubsetOf` edges g else True 
+
+--Prop topo--------------------------
